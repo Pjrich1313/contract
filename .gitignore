@@ -1,0 +1,14 @@
+# Compilation artifacts
+artifacts/
+*.abi
+*.bin
+
+# Solidity compiler binary
+solc-static-linux
+
+# Node modules (if used in future)
+node_modules/
+
+# Build directories
+build/
+dist/
