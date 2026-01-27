@@ -951,6 +951,7 @@ contract CATX is Context, IERC20, Ownable {
     }
    
     // Security: Input validation added to prevent setting unreasonably low transaction limits
+    // Minimum of 0.5% to prevent accidental DOS while allowing flexibility
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
         require(maxTxPercent >= 1, "Max transaction percent must be at least 1%");
         require(maxTxPercent <= 100, "Max transaction percent cannot exceed 100%");
@@ -960,6 +961,7 @@ contract CATX is Context, IERC20, Ownable {
     }
 
     // Security: Input validation added to prevent setting unreasonably low wallet limits
+    // Minimum of 1% to prevent accidental restriction while allowing flexibility
     function setMaxWalletPercent(uint256 maxWallPercent) external onlyOwner() {
         require(maxWallPercent >= 1, "Max wallet percent must be at least 1%");
         require(maxWallPercent <= 100, "Max wallet percent cannot exceed 100%");
@@ -1299,15 +1301,22 @@ contract CATX is Context, IERC20, Ownable {
         require(success, "BNB transfer failed");
     }
 
-    // Security: Added zero-address validation and return value check
+    // Security: Added zero-address validation and safe transfer pattern
+    // Uses low-level call to handle both standard and non-standard ERC20 tokens
     function removeStuckToken(address _address) external onlyOwner {
         require(_address != address(0), "Cannot remove tokens from zero address");
         require(_address != address(this), "Can't withdraw tokens destined for liquidity");
         uint256 balance = IERC20(_address).balanceOf(address(this));
         require(balance > 0, "Can't withdraw 0");
         
-        bool success = IERC20(_address).transfer(owner(), balance);
-        require(success, "Token transfer failed");
+        // Security: Safe transfer pattern that handles both standard and non-standard tokens
+        (bool success, bytes memory data) = _address.call(
+            abi.encodeWithSelector(IERC20.transfer.selector, owner(), balance)
+        );
+        require(
+            success && (data.length == 0 || abi.decode(data, (bool))),
+            "Token transfer failed"
+        );
     }
     
 }
