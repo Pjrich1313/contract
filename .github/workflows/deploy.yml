@@ -1,0 +1,393 @@
+name: Compile and Prepare CATX Contract
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Install Solidity Compiler
+        run: |
+          sudo add-apt-repository ppa:ethereum/ethereum
+          sudo apt-get update
+          sudo apt-get install -y solc
+          solc --version
+      
+      - name: Compile CATX.sol Contract
+        run: |
+          echo "Compiling CATX.sol contract..."
+          solc --optimize --optimize-runs 200 \
+               --bin --abi --output-dir ./build \
+               CATX.sol
+          
+          echo "Compilation complete!"
+          ls -la ./build
+      
+      - name: Generate Contract Artifacts
+        run: |
+          echo "Generating contract artifacts..."
+          
+          # Create artifacts directory
+          mkdir -p ./artifacts
+          
+          # Copy bytecode
+          cp ./build/CATX.bin ./artifacts/CATX_bytecode.bin
+          
+          # Copy ABI
+          cp ./build/CATX.abi ./artifacts/CATX_abi.json
+          
+          # Create a combined JSON artifact
+          echo "{" > ./artifacts/CATX_contract.json
+          echo '  "contractName": "CATX",' >> ./artifacts/CATX_contract.json
+          echo '  "abi": ' >> ./artifacts/CATX_contract.json
+          cat ./build/CATX.abi >> ./artifacts/CATX_contract.json
+          echo "," >> ./artifacts/CATX_contract.json
+          echo '  "bytecode": "0x'$(cat ./build/CATX.bin)'"' >> ./artifacts/CATX_contract.json
+          echo "}" >> ./artifacts/CATX_contract.json
+          
+          echo "Artifacts generated successfully!"
+          ls -la ./artifacts
+      
+      - name: Upload Compiled Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: catx-contract-artifacts
+          path: |
+            ./artifacts/
+            ./build/
+          retention-days: 90
+      
+      - name: Display Deployment Instructions
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "✅ CATX Contract Compilation Successful!"
+          echo "════════════════════════════════════════════════════════════════"
+          echo ""
+          echo "📦 Artifacts have been generated and uploaded to GitHub Actions."
+          echo ""
+          echo "🔗 Binance Smart Chain Testnet Deployment Instructions:"
+          echo "------------------------------------------------------------"
+          echo ""
+          echo "⚠️  SECURITY WARNING:"
+          echo "   DO NOT store private keys in GitHub Actions or CI/CD systems!"
+          echo "   Always deploy manually from a secure environment."
+          echo ""
+          echo "📋 Manual Deployment Steps:"
+          echo ""
+          echo "1. Download the artifacts from this workflow run"
+          echo "2. Install deployment tools (web3.js, ethers.js, or Hardhat)"
+          echo "3. Set up your BSC testnet configuration:"
+          echo "   - Network: BSC Testnet"
+          echo "   - RPC URL: https://data-seed-prebsc-1-s1.binance.org:8545/"
+          echo "   - Chain ID: 97"
+          echo "   - Currency Symbol: tBNB"
+          echo "   - Block Explorer: https://testnet.bscscan.com"
+          echo ""
+          echo "4. Fund your wallet with testnet BNB from:"
+          echo "   https://testnet.binance.org/faucet-smart"
+          echo ""
+          echo "5. Use the deployment script (see deploy-sample.js)"
+          echo ""
+          echo "📄 Sample deployment script available in artifacts"
+          echo "════════════════════════════════════════════════════════════════"
+      
+      - name: Create Sample Deployment Script
+        run: |
+          cat > ./artifacts/deploy-sample.js << 'EOFSCRIPT'
+          /**
+           * Sample Deployment Script for CATX Token on BSC Testnet
+           * 
+           * SECURITY WARNING:
+           * This is a SAMPLE script for reference only. DO NOT commit private keys to Git.
+           * Always use environment variables or secure key management solutions.
+           * 
+           * Prerequisites:
+           * - Node.js and npm installed
+           * - Run: npm install ethers
+           * - BSC testnet BNB in your wallet
+           * 
+           * Usage:
+           * 1. Set your private key as environment variable:
+           *    export PRIVATE_KEY="your-private-key-here"
+           * 2. Run: node deploy-sample.js
+           */
+          
+          const ethers = require('ethers');
+          const fs = require('fs');
+          
+          async function main() {
+              // Load private key from environment variable (NEVER hardcode!)
+              const privateKey = process.env.PRIVATE_KEY;
+              if (!privateKey) {
+                  console.error('Error: PRIVATE_KEY environment variable not set');
+                  console.error('Usage: PRIVATE_KEY="your-key" node deploy-sample.js');
+                  process.exit(1);
+              }
+          
+              // Connect to BSC Testnet
+              const provider = new ethers.providers.JsonRpcProvider(
+                  'https://data-seed-prebsc-1-s1.binance.org:8545/'
+              );
+              
+              const wallet = new ethers.Wallet(privateKey, provider);
+              console.log('Deploying from address:', wallet.address);
+              
+              // Check balance
+              const balance = await wallet.getBalance();
+              console.log('Balance:', ethers.utils.formatEther(balance), 'tBNB');
+              
+              if (balance.eq(0)) {
+                  console.error('Insufficient balance. Get testnet BNB from:');
+                  console.error('   https://testnet.binance.org/faucet-smart');
+                  process.exit(1);
+              }
+          
+              // Load compiled contract
+              const bytecode = '0x' + fs.readFileSync('CATX_bytecode.bin', 'utf8');
+              const abi = JSON.parse(fs.readFileSync('CATX_abi.json', 'utf8'));
+              
+              console.log('Contract bytecode loaded, size:', bytecode.length, 'characters');
+              
+              // Create contract factory
+              const factory = new ethers.ContractFactory(abi, bytecode, wallet);
+              
+              console.log('Deploying CATX contract to BSC Testnet...');
+              console.log('This may take a few moments...');
+              
+              // Deploy contract
+              const contract = await factory.deploy();
+              console.log('Transaction sent:', contract.deployTransaction.hash);
+              
+              // Wait for deployment
+              await contract.deployed();
+              
+              console.log('');
+              console.log('================================================================');
+              console.log('CATX Contract Deployed Successfully!');
+              console.log('================================================================');
+              console.log('Contract Address:', contract.address);
+              console.log('View on BSCScan:', 'https://testnet.bscscan.com/address/' + contract.address);
+              console.log('Deployer Address:', wallet.address);
+              console.log('Transaction Hash:', contract.deployTransaction.hash);
+              console.log('================================================================');
+              console.log('');
+              console.log('Next Steps:');
+              console.log('1. Verify contract on BSCScan');
+              console.log('2. Add liquidity to PancakeSwap');
+              console.log('3. Test token transfers');
+              console.log('4. Configure marketing wallet');
+              console.log('');
+              console.log('Remember: This is TESTNET. For mainnet:');
+              console.log('   - Use https://bsc-dataseed.binance.org/');
+              console.log('   - Double-check all parameters');
+              console.log('   - Verify contract source code');
+              console.log('   - Perform thorough testing');
+          }
+          
+          main()
+              .then(() => process.exit(0))
+              .catch((error) => {
+                  console.error('Deployment failed:', error);
+                  process.exit(1);
+              });
+          EOFSCRIPT
+          
+          echo "Sample deployment script created: deploy-sample.js"
+      
+      - name: Create Deployment README
+        run: |
+          cat > ./artifacts/DEPLOYMENT_INSTRUCTIONS.md << 'EOFREADME'
+          # CATX Token Deployment Instructions
+          
+          ## Overview
+          
+          This guide provides instructions for deploying the CATX token contract to Binance Smart Chain (BSC) Testnet.
+          
+          ## Security Warnings
+          
+          **CRITICAL SECURITY GUIDELINES:**
+          
+          1. **NEVER** commit private keys to Git repositories
+          2. **NEVER** store private keys in CI/CD systems (GitHub Actions, etc.)
+          3. **ALWAYS** use environment variables or secure key management systems
+          4. **ALWAYS** deploy from a secure, local environment
+          5. **ALWAYS** verify contract addresses after deployment
+          6. **ALWAYS** test thoroughly on testnet before mainnet deployment
+          
+          ## Prerequisites
+          
+          - Node.js (v14 or higher) and npm installed
+          - BSC testnet BNB (tBNB) for gas fees
+          - A wallet with your private key (e.g., MetaMask)
+          
+          ## Setup
+          
+          ### 1. Install Dependencies
+          
+          ```bash
+          npm install ethers
+          ```
+          
+          ### 2. Get Testnet BNB
+          
+          Visit the BSC testnet faucet to get free tBNB:
+          - https://testnet.binance.org/faucet-smart
+          
+          ### 3. Configure BSC Testnet in MetaMask
+          
+          - **Network Name:** BSC Testnet
+          - **RPC URL:** https://data-seed-prebsc-1-s1.binance.org:8545/
+          - **Chain ID:** 97
+          - **Currency Symbol:** tBNB
+          - **Block Explorer:** https://testnet.bscscan.com
+          
+          ## Deployment
+          
+          ### Method 1: Using the Sample Script
+          
+          1. Download the compiled artifacts from GitHub Actions
+          2. Extract the artifacts to a local directory
+          3. Navigate to the artifacts directory
+          4. Set your private key as an environment variable:
+          
+          ```bash
+          export PRIVATE_KEY="your-private-key-without-0x-prefix"
+          ```
+          
+          5. Run the deployment script:
+          
+          ```bash
+          node deploy-sample.js
+          ```
+          
+          ### Method 2: Using Hardhat
+          
+          If you prefer using Hardhat:
+          
+          1. Initialize a Hardhat project:
+          
+          ```bash
+          npm install --save-dev hardhat
+          npx hardhat init
+          ```
+          
+          2. Install dependencies:
+          
+          ```bash
+          npm install --save-dev @nomiclabs/hardhat-ethers ethers @nomiclabs/hardhat-waffle
+          ```
+          
+          3. Configure hardhat.config.js:
+          
+          ```javascript
+          require('@nomiclabs/hardhat-waffle');
+          
+          module.exports = {
+            solidity: "0.6.12",
+            networks: {
+              bscTestnet: {
+                url: "https://data-seed-prebsc-1-s1.binance.org:8545/",
+                chainId: 97,
+                accounts: [process.env.PRIVATE_KEY]
+              }
+            }
+          };
+          ```
+          
+          4. Create a deployment script in scripts/deploy.js
+          
+          5. Deploy:
+          
+          ```bash
+          PRIVATE_KEY="your-key" npx hardhat run scripts/deploy.js --network bscTestnet
+          ```
+          
+          ### Method 3: Using Remix IDE
+          
+          1. Go to https://remix.ethereum.org/
+          2. Upload CATX.sol
+          3. Compile with Solidity 0.6.12
+          4. Deploy & Run Transactions tab
+          5. Select "Injected Provider - MetaMask"
+          6. Make sure MetaMask is connected to BSC Testnet
+          7. Click "Deploy"
+          
+          ## Post-Deployment
+          
+          After successful deployment:
+          
+          1. **Save the contract address** - You'll need it for verification and interaction
+          2. **Verify on BSCScan:**
+             - Go to https://testnet.bscscan.com
+             - Search for your contract address
+             - Click "Verify and Publish"
+             - Upload source code and ABI
+          
+          3. **Test basic functions:**
+             - Check total supply
+             - Test token transfers
+             - Verify burn mechanism
+             - Test liquidity pool integration
+          
+          ## Mainnet Deployment
+          
+          When ready to deploy to BSC Mainnet:
+          
+          1. Change RPC URL to: `https://bsc-dataseed.binance.org/`
+          2. Change Chain ID to: `56`
+          3. Use real BNB (not testnet tBNB)
+          4. **TRIPLE-CHECK** all parameters
+          5. Consider using a multi-signature wallet
+          6. Perform security audit
+          7. Test all features thoroughly on testnet first
+          
+          ## Additional Resources
+          
+          - BSC Documentation: https://docs.binance.org/smart-chain/
+          - PancakeSwap: https://pancakeswap.finance/
+          - BscScan: https://bscscan.com/
+          - Ethers.js Docs: https://docs.ethers.io/
+          
+          ## Troubleshooting
+          
+          ### "Insufficient funds" error
+          - Ensure you have enough tBNB for gas fees
+          - Get more from the faucet
+          
+          ### "Nonce too low" error
+          - Reset your account in MetaMask (Settings > Advanced > Reset Account)
+          
+          ### Contract deployment fails
+          - Check Solidity version compatibility
+          - Verify optimizer settings
+          - Ensure sufficient gas limit
+          
+          ## Support
+          
+          For issues or questions:
+          - Check BSC developer documentation
+          - Visit BSC community forums
+          - Review contract source code
+          
+          ---
+          
+          **Remember:** Always prioritize security and test thoroughly before mainnet deployment!
+          EOFREADME
+          
+          echo "Deployment instructions created: DEPLOYMENT_INSTRUCTIONS.md"
+      
+      - name: Re-upload Artifacts with Scripts
+        uses: actions/upload-artifact@v3
+        with:
+          name: catx-contract-complete
+          path: ./artifacts/
+          retention-days: 90
