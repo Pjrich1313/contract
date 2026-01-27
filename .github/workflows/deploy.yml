@@ -17,9 +17,10 @@ jobs:
       
       - name: Install Solidity Compiler
         run: |
-          sudo add-apt-repository ppa:ethereum/ethereum
-          sudo apt-get update
-          sudo apt-get install -y solc
+          # Install solc version 0.6.12 which is required for this contract
+          wget https://github.com/ethereum/solidity/releases/download/v0.6.12/solc-static-linux
+          chmod +x solc-static-linux
+          sudo mv solc-static-linux /usr/local/bin/solc
           solc --version
       
       - name: Compile CATX.sol Contract
