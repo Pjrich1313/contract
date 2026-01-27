@@ -1,0 +1,64 @@
+name: Compile CATX Solidity Contract
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Install solc 0.6.12
+        run: |
+          wget https://github.com/ethereum/solidity/releases/download/v0.6.12/solc-static-linux
+          chmod +x solc-static-linux
+          sudo mv solc-static-linux /usr/local/bin/solc
+          solc --version
+      
+      - name: Compile CATX.sol
+        run: |
+          # Create output directory for artifacts
+          mkdir -p artifacts
+          
+          # Compile the contract and generate ABI and bytecode
+          solc --optimize --optimize-runs 200 \
+               --abi --bin \
+               --overwrite \
+               -o artifacts \
+               CATX.sol
+          
+          # Check if compilation was successful
+          if [ $? -eq 0 ]; then
+            echo "✅ Compilation successful!"
+            echo "Generated files:"
+            ls -lh artifacts/
+          else
+            echo "❌ Compilation failed!"
+            exit 1
+          fi
+      
+      - name: Display compilation artifacts
+        run: |
+          echo "=== ABI Files ==="
+          find artifacts -name "*.abi" -type f
+          echo ""
+          echo "=== Bytecode Files ==="
+          find artifacts -name "*.bin" -type f
+          echo ""
+          echo "=== Artifact sizes ==="
+          du -sh artifacts/*
+      
+      - name: Upload compilation artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: catx-compilation-artifacts
+          path: artifacts/
+          retention-days: 30
