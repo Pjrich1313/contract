@@ -756,6 +756,12 @@ contract CATX is Context, IERC20, Ownable {
     uint256 public _liquidityFee = 3;
     uint256 private _previousLiquidityFee = _liquidityFee;
 
+    // Security: Maximum fee percentage constant for consistency and safety
+    uint256 private constant MAX_FEE_PERCENT = 25;
+    
+    // Security: Minimum percentage for transaction and wallet limits
+    uint256 private constant MIN_PERCENT = 1;
+
     address public marketingWallet = 0x19B5585056fa6E13FCeD8cCB3CbBFBB63a07C59d;
 
     IUniswapV2Router02 public immutable uniswapV2Router;
@@ -764,8 +770,11 @@ contract CATX is Context, IERC20, Ownable {
     bool inSwapAndLiquify;
     bool public swapAndLiquifyEnabled = true;
     
-    // Security: Reentrancy guard for external calls
-    bool private _locked;
+    // Security: Reentrancy guard using uint256 for gas-efficient state transitions
+    // 1 = unlocked, 2 = locked
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+    uint256 private _status;
     
     uint256 public _maxTxAmount = 10 * 10**10 * 10**9; // 10%  //  
     uint256 public _maxWalletSize = 20 * 10**10 * 10**9; // 20%  // 
@@ -786,15 +795,19 @@ contract CATX is Context, IERC20, Ownable {
         inSwapAndLiquify = false;
     }
     
-    // Security: General-purpose reentrancy guard for external calls
+    // Security: General-purpose reentrancy guard using gas-efficient uint256 pattern
+    // Similar to OpenZeppelin's ReentrancyGuard implementation
     modifier nonReentrant() {
-        require(!_locked, "No reentrancy");
-        _locked = true;
+        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+        _status = _ENTERED;
         _;
-        _locked = false;
+        _status = _NOT_ENTERED;
     }
     constructor () public {
         _rOwned[_msgSender()] = _rTotal;
+        
+        // Security: Initialize reentrancy guard to unlocked state
+        _status = _NOT_ENTERED;
         
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
          // Create a uniswap pair for this new token
@@ -939,32 +952,32 @@ contract CATX is Context, IERC20, Ownable {
     
     // Security: Added maximum fee cap (25%) to prevent excessive taxation
     function setTaxFeePercent(uint256 taxFee) external onlyOwner() {
-        require(taxFee <= 25, "Tax fee cannot exceed 25%");
+        require(taxFee <= MAX_FEE_PERCENT, "Tax fee cannot exceed 25%");
         _taxFee = taxFee;
     }
     
     // Security: Added maximum fee cap (25%) to prevent excessive taxation
     function setLiquidityFeePercent(uint256 liquidityFee) external onlyOwner() {
-        require(liquidityFee <= 25, "Liquidity fee cannot exceed 25%");
+        require(liquidityFee <= MAX_FEE_PERCENT, "Liquidity fee cannot exceed 25%");
         _liquidityFee = liquidityFee;
     }
 
     // Security: Added maximum fee cap (25%) to prevent excessive taxation
     function setBurnFeePercent(uint256 burnFee) external onlyOwner() {
-        require(burnFee <= 25, "Burn fee cannot exceed 25%");
+        require(burnFee <= MAX_FEE_PERCENT, "Burn fee cannot exceed 25%");
         _burnFee = burnFee;
     }
 
     // Security: Added maximum fee cap (25%) to prevent excessive taxation
     function setMarketingFeePercent(uint256 fee) external onlyOwner() {
-        require(fee <= 25, "Marketing fee cannot exceed 25%");
+        require(fee <= MAX_FEE_PERCENT, "Marketing fee cannot exceed 25%");
         _marketingFee = fee;
     }
    
     // Security: Input validation added to prevent setting unreasonably low transaction limits
     // Minimum of 1% to prevent accidental DOS while allowing flexibility
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
-        require(maxTxPercent >= 1, "Max transaction percent must be at least 1%");
+        require(maxTxPercent >= MIN_PERCENT, "Max transaction percent must be at least 1%");
         require(maxTxPercent <= 100, "Max transaction percent cannot exceed 100%");
         _maxTxAmount = _tTotal.mul(maxTxPercent).div(
             10**2
@@ -974,7 +987,7 @@ contract CATX is Context, IERC20, Ownable {
     // Security: Input validation added to prevent setting unreasonably low wallet limits
     // Minimum of 1% to prevent accidental restriction while allowing flexibility
     function setMaxWalletPercent(uint256 maxWallPercent) external onlyOwner() {
-        require(maxWallPercent >= 1, "Max wallet percent must be at least 1%");
+        require(maxWallPercent >= MIN_PERCENT, "Max wallet percent must be at least 1%");
         require(maxWallPercent <= 100, "Max wallet percent cannot exceed 100%");
         _maxWalletSize = _tTotal.mul(maxWallPercent).div(
             10**2
@@ -1318,6 +1331,7 @@ contract CATX is Context, IERC20, Ownable {
     function removeStuckToken(address _address) external onlyOwner nonReentrant {
         require(_address != address(0), "Cannot remove tokens from zero address");
         require(_address != address(this), "Can't withdraw tokens destined for liquidity");
+        require(_address.isContract(), "Address must be a contract");
         uint256 balance = IERC20(_address).balanceOf(address(this));
         require(balance > 0, "Can't withdraw 0");
         
