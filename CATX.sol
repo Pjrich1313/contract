@@ -712,15 +712,21 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
  * @title CATX Token Contract
  * @dev Reflection token with auto-liquidity, burn, and marketing features
  * 
- * Security Features:
+ * Security Features Implemented:
  * - SafeMath library prevents arithmetic overflow/underflow (Solidity 0.6.12)
- * - Reentrancy protection via lockTheSwap modifier on swapAndLiquify
- * - Access control via onlyOwner modifier from Ownable
- * - Input validation on all setter functions with reasonable maximum caps
- * - Safe external call patterns using call() instead of transfer()
+ * - Gas-efficient reentrancy protection (OpenZeppelin pattern) for withdrawal functions
+ * - lockTheSwap modifier prevents reentrancy in swap and liquidity operations
+ * - Access control via onlyOwner modifier from Ownable contract
+ * - Input validation on all setter functions with security constants
+ * - Maximum fee caps (MAX_FEE_PERCENT = 25%) to prevent excessive taxation
+ * - Minimum transaction/wallet limits (MIN_PERCENT = 1%) to prevent DOS
+ * - Safe external call patterns using call() instead of deprecated transfer()
+ * - SafeERC20 pattern for token transfers (handles standard and non-standard tokens)
  * - Checks-effects-interactions pattern followed in critical functions
- * - Maximum fee caps (25%) to prevent excessive taxation
+ * - Contract address validation in removeStuckToken to prevent EOA calls
+ * - Zero-address validation in critical functions
  * - Transaction and wallet size limits to prevent whale manipulation
+ * - Updated to use block.timestamp instead of deprecated 'now' keyword
  */
 contract CATX is Context, IERC20, Ownable {
     using SafeMath for uint256;
