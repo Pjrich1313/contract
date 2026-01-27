@@ -764,6 +764,9 @@ contract CATX is Context, IERC20, Ownable {
     bool inSwapAndLiquify;
     bool public swapAndLiquifyEnabled = true;
     
+    // Security: Reentrancy guard for external calls
+    bool private _locked;
+    
     uint256 public _maxTxAmount = 10 * 10**10 * 10**9; // 10%  //  
     uint256 public _maxWalletSize = 20 * 10**10 * 10**9; // 20%  // 
     uint256 private numTokensSellToAddToLiquidity = 10 * 10**9  * 10**9; 
@@ -781,6 +784,14 @@ contract CATX is Context, IERC20, Ownable {
         inSwapAndLiquify = true;
         _;
         inSwapAndLiquify = false;
+    }
+    
+    // Security: General-purpose reentrancy guard for external calls
+    modifier nonReentrant() {
+        require(!_locked, "No reentrancy");
+        _locked = true;
+        _;
+        _locked = false;
     }
     constructor () public {
         _rOwned[_msgSender()] = _rTotal;
@@ -951,7 +962,7 @@ contract CATX is Context, IERC20, Ownable {
     }
    
     // Security: Input validation added to prevent setting unreasonably low transaction limits
-    // Minimum of 0.5% to prevent accidental DOS while allowing flexibility
+    // Minimum of 1% to prevent accidental DOS while allowing flexibility
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
         require(maxTxPercent >= 1, "Max transaction percent must be at least 1%");
         require(maxTxPercent <= 100, "Max transaction percent cannot exceed 100%");
@@ -1294,8 +1305,8 @@ contract CATX is Context, IERC20, Ownable {
     }
     
     // Security: Using call() instead of transfer() to prevent issues with gas stipend
-    // This follows the checks-effects-interactions pattern
-    function withdrawStuckBNB() external onlyOwner{
+    // This follows the checks-effects-interactions pattern with reentrancy protection
+    function withdrawStuckBNB() external onlyOwner nonReentrant {
         require (address(this).balance > 0, "Can't withdraw negative or zero");
         (bool success, ) = payable(owner()).call{value: address(this).balance}("");
         require(success, "BNB transfer failed");
@@ -1303,7 +1314,8 @@ contract CATX is Context, IERC20, Ownable {
 
     // Security: Added zero-address validation and safe transfer pattern
     // Uses low-level call to handle both standard and non-standard ERC20 tokens
-    function removeStuckToken(address _address) external onlyOwner {
+    // Protected against reentrancy attacks
+    function removeStuckToken(address _address) external onlyOwner nonReentrant {
         require(_address != address(0), "Cannot remove tokens from zero address");
         require(_address != address(this), "Can't withdraw tokens destined for liquidity");
         uint256 balance = IERC20(_address).balanceOf(address(this));
