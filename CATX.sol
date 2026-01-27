@@ -1342,11 +1342,12 @@ contract CATX is Context, IERC20, Ownable {
         require(balance > 0, "Can't withdraw 0");
         
         // Security: Safe transfer pattern that handles both standard and non-standard tokens
+        // Handles tokens that return bool (true) and tokens that don't return anything
         (bool success, bytes memory data) = _address.call(
             abi.encodeWithSelector(IERC20.transfer.selector, owner(), balance)
         );
         require(
-            success && (data.length == 0 || abi.decode(data, (bool))),
+            success && (data.length == 0 || (data.length == 32 && abi.decode(data, (bool)))),
             "Token transfer failed"
         );
     }
