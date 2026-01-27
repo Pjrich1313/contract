@@ -261,8 +261,11 @@ jobs:
           4. Set your private key as an environment variable:
           
           ```bash
-          export PRIVATE_KEY="your-private-key-without-0x-prefix"
+          export PRIVATE_KEY="your-private-key-here"
           ```
+          
+          Note: Private key can be with or without 0x prefix
+          
           
           5. Run the deployment script:
           
@@ -286,6 +289,9 @@ jobs:
           ```bash
           npm install --save-dev @nomiclabs/hardhat-ethers ethers @nomiclabs/hardhat-waffle
           ```
+          
+          Note: For newer Hardhat versions, use @nomicfoundation packages instead
+          
           
           3. Configure hardhat.config.js:
           
